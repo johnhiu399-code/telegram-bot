@@ -26,6 +26,7 @@ scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
+
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
@@ -48,34 +49,34 @@ async def process(update: Update, action: str):
     work_hours = ""
     status = ""
 
-    # ===== 上班 =====
+    # 上班
     if action == "On Duty":
         work_sessions[user_id] = now
         if emp:
             start = datetime.strptime(emp["start"], "%H:%M").time()
             status = "Late ❌" if now.time() > start else "On Time ✅"
 
-    # ===== 休息开始 =====
+    # 休息开始
     elif action == "Break":
         break_sessions[user_id] = now
         status = "Break Start"
 
-    # ===== 休息结束 =====
+    # 休息结束
     elif action == "Break Back":
         if user_id in break_sessions:
             mins = int((now - break_sessions.pop(user_id)).total_seconds() / 60)
             status = f"Break Over {mins} mins ❌" if mins > BREAK_LIMIT else f"Break OK {mins} mins ✅"
 
-    # ===== 下班 =====
+    # 下班
     elif action == "Off Duty":
         if user_id in work_sessions:
             hours = round((now - work_sessions.pop(user_id)).total_seconds() / 3600, 2)
             work_hours = f"{hours} hrs"
 
-    # ===== 写入 =====
+    # 写入 Google Sheet
     sheet.append_row([f"{user} {emp_name}", user_id, action, time_str, work_hours, status])
 
-    # ===== 回复 =====
+    # 回复
     await update.message.reply_text(
         f"👤 {user} {emp_name}\n"
         f"📌 {action} 成功\n"
@@ -111,13 +112,13 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for r in records:
         name = r.get("Name")
         action = r.get("Action")
-        time = r.get("Time")
+        time_val = r.get("Time")
 
-        if not name or not action or not time:
+        if not name or not action or not time_val:
             continue
 
-        if today in str(time):
-            result += f"{name} | {action} | {time}\n"
+        if today in str(time_val):
+            result += f"{name} | {action} | {time_val}\n"
 
     if result == "📊 今日报表\n\n":
         result += "暂无记录"
@@ -151,7 +152,7 @@ app.add_handler(CommandHandler("rest", rest))
 app.add_handler(CommandHandler("back", back))
 app.add_handler(CommandHandler("report", report))
 
-# 定时提醒
+# 定时任务
 job_queue = app.job_queue
 job_queue.run_daily(check_no_checkin, time(hour=9, minute=15))
 
