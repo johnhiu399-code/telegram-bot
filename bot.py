@@ -19,6 +19,8 @@ scope = [
 ]
 
 # 自动判断路径（Render / 本地）
+import os
+
 if os.path.exists("/etc/secrets/credentials.json"):
     CREDS_FILE = "/etc/secrets/credentials.json"
 else:
