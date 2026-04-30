@@ -141,7 +141,7 @@ def report(update, context):
 from flask import Flask
 from threading import Thread
 
-web = Flask(name)
+web = Flask(__name__)
 
 @web.route("/")
 def home():
