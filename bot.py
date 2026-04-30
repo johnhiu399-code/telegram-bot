@@ -1,9 +1,11 @@
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from datetime import datetime, time
+import logging
+from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os
+
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
 
 # ===== 配置 =====
 TOKEN = "8625047747:AAHDgZx5xl7LMk67s0nlzjbGHRogNTdAmtE"
@@ -26,110 +28,124 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# 🔥 自动判断路径（Render / 本地）
+# 自动判断路径（Render / 本地）
 if os.path.exists("/etc/secrets/credentials.json"):
     CREDS_FILE = "/etc/secrets/credentials.json"
 else:
     CREDS_FILE = "credentials.json"
 
-creds = ServiceAccountCredentials.from_json_keyfile_name(
-    CREDS_FILE, scope
-)
+creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope)
 client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
 
 # ===== 内存 =====
 work_sessions = {}
 break_sessions = {}
-USER_CHAT_IDS = {}
 
-# ===== 核心逻辑 =====
-async def process(update: Update, action: str):
+# ===== Logging =====
+logging.basicConfig(level=logging.INFO)
+
+# ===== 功能 =====
+
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Bot 已启动！\n使用 /work /end /rest /back /report")
+
+def work(update: Update, context: CallbackContext):
     user = update.effective_user.first_name
-    user_id = str(update.effective_user.id)
     now = datetime.now()
-    time_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
-    emp = EMPLOYEES.get(user)
-    emp_name = emp["name"] if emp else "Unknown"
+    work_sessions[user] = now
 
-    work_hours = ""
-    status = ""
+    sheet.append_row([
+        user,
+        "",
+        "Work Start",
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        "",
+        "Working"
+    ])
 
-    if action == "On Duty":
-        work_sessions[user_id] = now
-        if emp:
-            start = datetime.strptime(emp["start"], "%H:%M").time()
-            status = "Late ❌" if now.time() > start else "On Time ✅"
+    update.message.reply_text(f"{user} 开始工作 ✅")
 
-    elif action == "Break":
-        break_sessions[user_id] = now
-        status = "Break Start"
-
-    elif action == "Break Back":
-        if user_id in break_sessions:
-            mins = int((now - break_sessions.pop(user_id)).total_seconds() / 60)
-            status = f"Break Over {mins} mins ❌" if mins > BREAK_LIMIT else f"Break OK {mins} mins ✅"
-
-    elif action == "Off Duty":
-        if user_id in work_sessions:
-            hours = round((now - work_sessions.pop(user_id)).total_seconds() / 3600, 2)
-            work_hours = f"{hours} hrs"
-
-    # 写入 Google Sheet
-    sheet.append_row([f"{user} {emp_name}", user_id, action, time_str, work_hours, status])
-
-    await update.message.reply_text(
-        f"👤 {user} {emp_name}\n"
-        f"📌 {action} 成功\n"
-        f"⏰ {time_str}\n"
-        f"{status}"
-    )
-
-# ===== 指令 =====
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def end(update: Update, context: CallbackContext):
     user = update.effective_user.first_name
-    USER_CHAT_IDS[user] = update.effective_chat.id
-    await update.message.reply_text("系统启动成功 ✅\n使用：/work /end /rest /back")
+    now = datetime.now()
 
-async def work(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await process(update, "On Duty")
+    if user not in work_sessions:
+        update.message.reply_text("你还没开始工作 ❌")
+        return
 
-async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await process(update, "Off Duty")
+    start_time = work_sessions.pop(user)
+    hours = round((now - start_time).total_seconds() / 3600, 2)
 
-async def rest(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await process(update, "Break")
+    sheet.append_row([
+        user,
+        "",
+        "Work End",
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        hours,
+        "Ended"
+    ])
 
-async def back(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await process(update, "Break Back")
+    update.message.reply_text(f"{user} 下班 ✅ 工作 {hours} 小时")
 
-# ===== 报表 =====
-async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def rest(update: Update, context: CallbackContext):
+    user = update.effective_user.first_name
+    now = datetime.now()
+
+    break_sessions[user] = now
+
+    sheet.append_row([
+        user,
+        "",
+        "Break Start",
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        "",
+        "Break"
+    ])
+
+    update.message.reply_text(f"{user} 休息中 ☕")
+
+def back(update: Update, context: CallbackContext):
+    user = update.effective_user.first_name
+    now = datetime.now()
+
+    if user not in break_sessions:
+        update.message.reply_text("你没有在休息 ❌")
+        return
+
+    start = break_sessions.pop(user)
+    minutes = int((now - start).total_seconds() / 60)
+
+    status = "OK" if minutes <= BREAK_LIMIT else "Overtime"
+
+    sheet.append_row([
+        user,
+        "",
+        "Break End",
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        minutes,
+        status
+    ])
+
+    update.message.reply_text(f"{user} 回来了 ✅ 休息 {minutes} 分钟")
+
+def report(update: Update, context: CallbackContext):
     records = sheet.get_all_records()
     today = datetime.now().strftime("%Y-%m-%d")
 
-    result = "📊 今日报表\n\n"
+    result = "📊 今日记录\n\n"
 
     for r in records:
         if today in str(r.get("Time", "")):
             result += f"{r.get('Name')} | {r.get('Action')} | {r.get('Time')}\n"
 
-    if result == "📊 今日报表\n\n":
+    if result == "📊 今日记录\n\n":
         result += "暂无记录"
 
-    await update.message.reply_text(result)
+    update.message.reply_text(result)
 
-# ===== 主程序 =====
-app = ApplicationBuilder().token(TOKEN).build()
-
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("work", work))
-app.add_handler(CommandHandler("end", end))
-app.add_handler(CommandHandler("rest", rest))
-app.add_handler(CommandHandler("back", back))
-app.add_handler(CommandHandler("report", report))
-
+# ===== Flask 防休眠 =====
 from flask import Flask
 from threading import Thread
 
@@ -142,11 +158,19 @@ def home():
 def run_web():
     web.run(host="0.0.0.0", port=10000)
 
-# 启动假网站（重要）
-Thread(target=run_web, daemon=True).start()
+Thread(target=run_web).start()
+
+# ===== 主程序 =====
+updater = Updater(TOKEN, use_context=True)
+dp = updater.dispatcher
+
+dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CommandHandler("work", work))
+dp.add_handler(CommandHandler("end", end))
+dp.add_handler(CommandHandler("rest", rest))
+dp.add_handler(CommandHandler("back", back))
+dp.add_handler(CommandHandler("report", report))
 
 print("BOT RUNNING...")
-print("force rebuild")
-
-# 启动 Telegram Bot
-app.run_polling()
+updater.start_polling()
+updater.idle()
