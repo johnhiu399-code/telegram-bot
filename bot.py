@@ -32,7 +32,9 @@ if os.path.exists("/etc/secrets/credentials.json"):
 else:
     CREDS_FILE = "credentials.json"
 
-creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    "/etc/secrets/credentials.json", scope
+)
 client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
 
