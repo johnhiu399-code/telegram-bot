@@ -8,14 +8,9 @@ from telegram.ext import Updater, CommandHandler
 
 # ===== 配置 =====
 TOKEN = "8625047747:AAHDgZx5xl7LMk67s0nlzjbGHRogNTdAmtE"
-SHEET_NAME = "IB CS Attendance"
+SHEET_NAME = "1B CS Attendance"
 
-EMPLOYEES = {
-    "CS 1": {"name": "Avelyn", "start": "09:00"},
-    "CS 2": {"name": "Sam", "start": "09:00"},
-    "CS 3": {"name": "John", "start": "17:00"},
-    "CS 4": {"name": "Terry", "start": "17:00"},
-}
+BREAK_LIMIT = 30
 
 # ===== Google Sheet =====
 scope = [
@@ -23,7 +18,9 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Render / 本地路径判断
+# 自动判断路径（Render / 本地）
+import os
+
 if os.path.exists("/etc/secrets/credentials.json"):
     CREDS_FILE = "/etc/secrets/credentials.json"
 else:
@@ -35,110 +32,127 @@ sheet = client.open(SHEET_NAME).sheet1
 
 # ===== 内存 =====
 work_sessions = {}
-rest_sessions = {}
+break_sessions = {}
 
 # ===== Logging =====
 logging.basicConfig(level=logging.INFO)
 
-# ===== 工具函数 =====
-def find_employee(user):
-    for key, val in EMPLOYEES.items():
-        if val["name"].lower() == user.lower():
-            return key, val
-    return None, None
-
-def is_late(now, start_time):
-    return "❌" if now.strftime("%H:%M") > start_time else "✅"
-
-# ===== 指令 =====
+# ===== 功能 =====
 
 def start(update, context):
-    update.message.reply_text("👋 欢迎使用 CS Attendance Bot")
+    update.message.reply_text("Bot 已启动！\n/work 开始工作\n/end 下班\n/rest 休息\n/back 回来\n/report 查看记录")
 
 def work(update, context):
     user = update.effective_user.first_name
-    user_id = str(update.effective_user.id)
     now = datetime.now()
 
-    cs_id, emp = find_employee(user)
-    if not emp:
-        update.message.reply_text("❌ 未注册员工")
-        return
+    work_sessions[user] = now
 
-    late = is_late(now, emp["start"])
-    work_sessions[user_id] = now
+    sheet.append_row([
+        user,
+        "",
+        "Work Start",
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        "",
+        "Working"
+    ])
 
-    sheet.append_row([user, "On Duty", now.strftime("%Y-%m-%d %H:%M:%S")])
-
-    msg = f"""👤 {cs_id} {emp['name']}
-📌 On Duty 成功
-⏰ {now.strftime('%Y-%m-%d %H:%M:%S')}
-Late {late}"""
-
-    update.message.reply_text(msg)
+    update.message.reply_text(f"{user} 开始工作 ✅")
 
 def end(update, context):
     user = update.effective_user.first_name
-    user_id = str(update.effective_user.id)
     now = datetime.now()
 
-    start_time = work_sessions.get(user_id)
-    if not start_time:
-        update.message.reply_text("❌ 没有上班记录")
+    if user not in work_sessions:
+        update.message.reply_text("你还没开始工作 ❌")
         return
 
-    duration = now - start_time
-    hours = round(duration.total_seconds() / 3600, 2)
+    start_time = work_sessions.pop(user)
+    hours = round((now - start_time).total_seconds() / 3600, 2)
 
-    sheet.append_row([user, "Off Duty", now.strftime("%Y-%m-%d %H:%M:%S")])
+    sheet.append_row([
+        user,
+        "",
+        "Work End",
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        hours,
+        "Ended"
+    ])
 
-    msg = f"""📌 下班成功
-👤 {user}
-⏰ {now.strftime('%Y-%m-%d %H:%M:%S')}
-🕒 工作时间：{hours} 小时"""
-
-    update.message.reply_text(msg)
+    update.message.reply_text(f"{user} 下班 ✅ 工作 {hours} 小时")
 
 def rest(update, context):
-    user_id = str(update.effective_user.id)
+    user = update.effective_user.first_name
     now = datetime.now()
 
-    rest_sessions[user_id] = now
+    break_sessions[user] = now
 
-    update.message.reply_text(f"""☕ 休息开始
-⏰ {now.strftime('%H:%M:%S')}""")
+    sheet.append_row([
+        user,
+        "",
+        "Break Start",
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        "",
+        "Break"
+    ])
+
+    update.message.reply_text(f"{user} 休息中 ☕️")
 
 def back(update, context):
-    user_id = str(update.effective_user.id)
+    user = update.effective_user.first_name
     now = datetime.now()
 
-    rest_start = rest_sessions.get(user_id)
-    if not rest_start:
-        update.message.reply_text("❌ 没有休息记录")
+    if user not in break_sessions:
+        update.message.reply_text("你没有在休息 ❌")
         return
 
-    duration = now - rest_start
-    mins = int(duration.total_seconds() / 60)
+    start = break_sessions.pop(user)
+    minutes = int((now - start).total_seconds() / 60)
 
-    update.message.reply_text(f"""🔙 已返回工作
-🕒 休息时间：{mins} 分钟""")
+    status = "OK" if minutes <= BREAK_LIMIT else "Overtime"
+
+    sheet.append_row([
+        user,
+        "",
+        "Break End",
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        minutes,
+        status
+    ])
+
+    update.message.reply_text(f"{user} 回来了 ✅ 休息 {minutes} 分钟")
 
 def report(update, context):
     records = sheet.get_all_records()
     today = datetime.now().strftime("%Y-%m-%d")
 
-    result = "📊 今日报表\n\n"
+    result = "📊 今日记录\n\n"
 
     for r in records:
         if today in str(r.get("Time", "")):
             result += f"{r.get('Name')} | {r.get('Action')} | {r.get('Time')}\n"
 
-    if result.strip() == "📊 今日报表":
+    if result == "📊 今日记录\n\n":
         result += "暂无记录"
 
     update.message.reply_text(result)
 
-# ===== 启动 =====
+# ===== Flask 防休眠（Render 必须）=====
+from flask import Flask
+from threading import Thread
+
+web = Flask(name)
+
+@web.route("/")
+def home():
+    return "Bot is alive"
+
+def run_web():
+    web.run(host="0.0.0.0", port=10000)
+
+Thread(target=run_web).start()
+
+# ===== 主程序 =====
 updater = Updater(TOKEN, use_context=True)
 dp = updater.dispatcher
 
