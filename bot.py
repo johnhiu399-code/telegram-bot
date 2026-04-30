@@ -130,9 +130,6 @@ app.add_handler(CommandHandler("rest", rest))
 app.add_handler(CommandHandler("back", back))
 app.add_handler(CommandHandler("report", report))
 
-print("BOT RUNNING...")
-app.run_polling()
-
 from flask import Flask
 from threading import Thread
 
@@ -145,4 +142,11 @@ def home():
 def run_web():
     web.run(host="0.0.0.0", port=10000)
 
-Thread(target=run_web).start()
+# 启动假网站（重要）
+Thread(target=run_web, daemon=True).start()
+
+print("BOT RUNNING...")
+print("force rebuild")
+
+# 启动 Telegram Bot
+app.run_polling()
