@@ -4,21 +4,11 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os
 
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import Updater, CommandHandler
 
 # ===== 配置 =====
 TOKEN = "8625047747:AAHDgZx5xl7LMk67s0nlzjbGHRogNTdAmtE"
 SHEET_NAME = "1B CS Attendance"
-
-EMPLOYEES = {
-    "CS 1": {"name": "Avelyn", "start": "09:00"},
-    "CS 2": {"name": "Sam", "start": "09:00"},
-    "CS 3": {"name": "John", "start": "17:00"},
-    "CS 4": {"name": "Terry", "start": "17:00"},
-    "CS 5": {"name": "Anson", "start": "01:00"},
-    "CS 6": {"name": "Nate", "start": "01:00"},
-}
 
 BREAK_LIMIT = 30
 
@@ -47,10 +37,10 @@ logging.basicConfig(level=logging.INFO)
 
 # ===== 功能 =====
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Bot 已启动！\n使用 /work /end /rest /back /report")
+def start(update, context):
+    update.message.reply_text("Bot 已启动！\n/work 开始工作\n/end 下班\n/rest 休息\n/back 回来\n/report 查看记录")
 
-def work(update: Update, context: CallbackContext):
+def work(update, context):
     user = update.effective_user.first_name
     now = datetime.now()
 
@@ -67,7 +57,7 @@ def work(update: Update, context: CallbackContext):
 
     update.message.reply_text(f"{user} 开始工作 ✅")
 
-def end(update: Update, context: CallbackContext):
+def end(update, context):
     user = update.effective_user.first_name
     now = datetime.now()
 
@@ -89,7 +79,7 @@ def end(update: Update, context: CallbackContext):
 
     update.message.reply_text(f"{user} 下班 ✅ 工作 {hours} 小时")
 
-def rest(update: Update, context: CallbackContext):
+def rest(update, context):
     user = update.effective_user.first_name
     now = datetime.now()
 
@@ -106,7 +96,7 @@ def rest(update: Update, context: CallbackContext):
 
     update.message.reply_text(f"{user} 休息中 ☕")
 
-def back(update: Update, context: CallbackContext):
+def back(update, context):
     user = update.effective_user.first_name
     now = datetime.now()
 
@@ -130,7 +120,7 @@ def back(update: Update, context: CallbackContext):
 
     update.message.reply_text(f"{user} 回来了 ✅ 休息 {minutes} 分钟")
 
-def report(update: Update, context: CallbackContext):
+def report(update, context):
     records = sheet.get_all_records()
     today = datetime.now().strftime("%Y-%m-%d")
 
@@ -145,7 +135,7 @@ def report(update: Update, context: CallbackContext):
 
     update.message.reply_text(result)
 
-# ===== Flask 防休眠 =====
+# ===== Flask 防休眠（Render 必须）=====
 from flask import Flask
 from threading import Thread
 
