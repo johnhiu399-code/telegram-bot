@@ -33,7 +33,7 @@ else:
     CREDS_FILE = "credentials.json"
 
 creds = ServiceAccountCredentials.from_json_keyfile_name(
-    "/etc/secrets/credentials.json", scope
+    CREDS_FILE, scope
 )
 client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
