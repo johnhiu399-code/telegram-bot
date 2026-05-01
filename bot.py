@@ -90,6 +90,15 @@ def work(update, context):
 
     start_hour, _ = SHIFT[staff]
 
+shift_start = now.replace(hour=start_hour, minute=0, second=0, microsecond=0)
+
+# 如果当前时间比班次早（跨天班处理）
+if now.hour < start_hour:
+    shift_start = shift_start.replace(day=now.day - 1)
+
+late = now > shift_start
+status = "Late ❌" if late else "On Time ✅"
+
     late = now.hour > start_hour or (now.hour == start_hour and now.minute > 0)
     status = "Late ❌" if late else "On Time ✅"
 
