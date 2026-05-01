@@ -179,6 +179,10 @@ Thread(target=run_web).start()
 
 # ===== 主程序 =====
 updater = Updater(TOKEN, use_context=True)
+
+# 🔥 关键：防冲突
+updater.bot.delete_webhook()
+
 dp = updater.dispatcher
 
 dp.add_handler(CommandHandler("start", start))
