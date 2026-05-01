@@ -43,37 +43,30 @@ def start(update, context):
     update.message.reply_text("Bot 已启动！\n/work 开始工作\n/end 下班\n/rest 休息\n/back 回来\n/report 查看记录")
 
 def work(update, context):
-    user = update.effective_user.first_name
-    now = datetime.now()
+    try:
+        user = update.effective_user.full_name or "Unknown"
+        now = datetime.now()
 
-    work_sessions[user] = now
+        work_sessions[user] = now
 
-    emp = EMPLOYEES.get(user)
+        sheet.append_row([
+            user,
+            "",
+            "Work Start",
+            now.strftime("%Y-%m-%d %H:%M:%S"),
+            "",
+            "Working"
+        ])
 
-    if not emp:
-        cs = "CS ?"
-        late = "❌"
-    else:
-        cs = emp["cs"]
-        start_time = emp["start"]
-        late = "❌" if now.strftime("%H:%M") > start_time else "✅"
-
-    sheet.append_row([
-        user, "", "On Duty",
-        now.strftime("%Y-%m-%d %H:%M:%S"),
-        "", "Working"
-    ])
-
-    msg = f"""👤 {cs} {user}
-━━━━━━━━━━━━━━━
+        msg = f"""👤 {user}
 📌 On Duty 成功
-⏰ 时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
-🟢 状态: 正常
+⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
+Late ❌"""
 
-Late {late}"""
+        update.message.reply_text(msg)
 
-    update.message.reply_text(msg)
-
+    except Exception as e:
+        update.message.reply_text(f"❌ Error: {e}")
 def end(update, context):
     user = update.effective_user.first_name
     now = datetime.now()
