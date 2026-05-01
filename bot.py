@@ -178,20 +178,26 @@ def run_web():
 Thread(target=run_web).start()
 
 # ===== 主程序 =====
-updater = Updater(TOKEN, use_context=True)
+if __name__ == "__main__":
 
-# 🔥 关键：防冲突
-updater.bot.delete_webhook()
+    # 启动 Flask（防休眠）
+    from threading import Thread
+    Thread(target=run_web).start()
 
-dp = updater.dispatcher
+    updater = Updater(TOKEN, use_context=True)
 
-dp.add_handler(CommandHandler("start", start))
-dp.add_handler(CommandHandler("work", work))
-dp.add_handler(CommandHandler("end", end))
-dp.add_handler(CommandHandler("rest", rest))
-dp.add_handler(CommandHandler("back", back))
-dp.add_handler(CommandHandler("report", report))
+    # 🔥 清 webhook（防冲突）
+    updater.bot.delete_webhook()
 
-print("BOT RUNNING...")
-updater.start_polling()
-updater.idle()
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("work", work))
+    dp.add_handler(CommandHandler("end", end))
+    dp.add_handler(CommandHandler("rest", rest))
+    dp.add_handler(CommandHandler("back", back))
+    dp.add_handler(CommandHandler("report", report))
+
+    print("BOT RUNNING...")
+    updater.start_polling()
+    updater.idle()
