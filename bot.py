@@ -146,29 +146,38 @@ def work(update, context):
 
 # 🔴 下班
 def end(update, context):
-    staff = get_staff(update)
-    user = staff["name"]
+    user_id = update.effective_user.id
+
+    if user_id not in USER_MAP:
+        update.message.reply_text("❌ 未注册员工")
+        return
+
+    staff_id, name = USER_MAP[user_id]
     now = datetime.now()
 
-    if user not in work_sessions:
+    if staff_id not in work_sessions:
         update.message.reply_text("❌ 你还没上班")
         return
 
-    start_time = work_sessions.pop(user)
+    start_time = work_sessions.pop(staff_id)
     hours = round((now - start_time).total_seconds() / 3600, 2)
 
     sheet.append_row([
-        user,
+        staff_id,
+        name,
         "Work End",
         now.strftime("%Y-%m-%d %H:%M:%S"),
-        hours
+        hours,
+        "Ended"
     ])
 
-    update.message.reply_text(f"""👤 {user}
-📌 Off Duty 成功
+    msg = f"""👤 {staff_id} {name}
+🔴 Off Duty 成功
 ⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
-🕒 工作: {hours} 小时""")
+🕒 工作: {hours} 小时"""
 
+    update.message.reply_text(msg)
+    
 # ☕ 休息
 def rest(update, context):
     staff = get_staff(update)
