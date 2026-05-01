@@ -27,14 +27,14 @@ creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope)
 client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
 
-# ===== 员工（改这里的 ID）=====
-EMPLOYEES = {
-    "CS 1": {"name": "Avelyn", "start": "09:00"},
-    "CS 2": {"name": "Sam", "start": "09:00"},
-    "CS 3": {"name": "John", "start": "17:00"},
-    "CS 4": {"name": "Terry", "start": "17:00"},
-    "CS 5": {"name": "Anson", "start": "01:00"},
-    "CS 6": {"name": "Nate", "start": "01:00"},
+# ===== 员工名单（必须有）=====
+STAFF = {
+    "CS 1": "AVELYN",
+    "CS 2": "SAM",
+    "CS 3": "JOHN",
+    "CS 4": "TERRY",
+    "CS 5": "ANSON",
+    "CS 6": "NATE"
 }
 
 BREAK_LIMIT = 30
