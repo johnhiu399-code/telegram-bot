@@ -1,10 +1,14 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os
 
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+
+# ===== 时区（Malaysia）=====
+from zoneinfo import ZoneInfo
+MY_TZ = ZoneInfo("Asia/Kuala_Lumpur")
 
 # ===== TOKEN =====
 TOKEN = os.environ.get("TOKEN")
@@ -22,7 +26,7 @@ SHIFT = {
     "CS 6": (1, 9),
 }
 
-# ===== 名字映射 =====
+# ===== 名字 =====
 NAME_MAP = {
     "CS 1": "AVELYN",
     "CS 2": "SAM",
@@ -56,27 +60,34 @@ logging.basicConfig(level=logging.INFO)
 # ===== 获取员工 =====
 def get_staff(update):
     staff = update.effective_user.first_name.strip().upper()
-
     if staff not in SHIFT:
         return None, None
+    return staff, NAME_MAP.get(staff, "UNKNOWN")
 
-    name = NAME_MAP.get(staff, "UNKNOWN")
-    return staff, name
+# ===== Malaysia 时间 =====
+def now_my():
+    return datetime.now(MY_TZ)
+
+# ===== 计算班次开始时间（重点）=====
+def get_shift_start(now, start_hour):
+    shift_start = now.replace(hour=start_hour, minute=0, second=0, microsecond=0)
+
+    # 跨天处理（例如 1AM 班）
+    if now.hour < start_hour:
+        shift_start = shift_start - timedelta(days=1)
+
+    return shift_start
 
 # ===== START =====
 def start(update, context):
     update.message.reply_text(
-        "系统已启动 ✅\n"
-        "/work 上班\n"
-        "/end 下班\n"
-        "/rest 休息\n"
-        "/back 回来"
+        "系统已启动 ✅\n/work 上班\n/end 下班\n/rest 休息\n/back 回来"
     )
 
 # ===== WORK =====
 def work(update, context):
     staff, name = get_staff(update)
-    now = datetime.now()
+    now = now_my()
 
     if not staff:
         update.message.reply_text("❌ 请把名字改成 CS 1 / CS 2...")
@@ -89,17 +100,9 @@ def work(update, context):
     work_sessions[staff] = now
 
     start_hour, _ = SHIFT[staff]
+    shift_start = get_shift_start(now, start_hour)
 
-shift_start = now.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-
-# 如果当前时间比班次早（跨天班处理）
-if now.hour < start_hour:
-    shift_start = shift_start.replace(day=now.day - 1)
-
-late = now > shift_start
-status = "Late ❌" if late else "On Time ✅"
-
-    late = now.hour > start_hour or (now.hour == start_hour and now.minute > 0)
+    late = now > shift_start
     status = "Late ❌" if late else "On Time ✅"
 
     sheet.append_row([
@@ -121,7 +124,7 @@ status = "Late ❌" if late else "On Time ✅"
 # ===== END =====
 def end(update, context):
     staff, name = get_staff(update)
-    now = datetime.now()
+    now = now_my()
 
     if not staff:
         update.message.reply_text("❌ 未识别员工")
@@ -153,7 +156,7 @@ def end(update, context):
 # ===== REST =====
 def rest(update, context):
     staff, name = get_staff(update)
-    now = datetime.now()
+    now = now_my()
 
     if not staff:
         update.message.reply_text("❌ 未识别员工")
@@ -161,21 +164,12 @@ def rest(update, context):
 
     break_sessions[staff] = now
 
-    sheet.append_row([
-        staff,
-        name,
-        "Break Start",
-        now.strftime("%Y-%m-%d %H:%M:%S"),
-        "",
-        "Break"
-    ])
-
     update.message.reply_text(f"☕ {staff} {name}\nBreak 开始")
 
 # ===== BACK =====
 def back(update, context):
     staff, name = get_staff(update)
-    now = datetime.now()
+    now = now_my()
 
     if not staff:
         update.message.reply_text("❌ 未识别员工")
@@ -186,24 +180,17 @@ def back(update, context):
         return
 
     start = break_sessions.pop(staff)
-    minutes = int((now - start).total_seconds() / 60)
+
+    seconds = int((now - start).total_seconds())
+    minutes = seconds // 60
 
     status = "OK ✅" if minutes <= BREAK_LIMIT else "Overtime ❌"
-
-    sheet.append_row([
-        staff,
-        name,
-        "Break End",
-        now.strftime("%Y-%m-%d %H:%M:%S"),
-        minutes,
-        status
-    ])
 
     update.message.reply_text(
         f"""👤 {staff} {name}
 ✅ Break Back 成功
 ⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
-☕ 休息: {minutes} 分钟
+☕ 休息: {minutes} 分钟 ({seconds} 秒)
 {status}"""
     )
 
