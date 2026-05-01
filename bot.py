@@ -48,38 +48,56 @@ def work(update, context):
 
     work_sessions[user] = now
 
+    emp = EMPLOYEES.get(user)
+
+    if not emp:
+        cs = "CS ?"
+        late = "❌"
+    else:
+        cs = emp["cs"]
+        start_time = emp["start"]
+        late = "❌" if now.strftime("%H:%M") > start_time else "✅"
+
     sheet.append_row([
-        user,
-        "",
-        "Work Start",
+        user, "", "On Duty",
         now.strftime("%Y-%m-%d %H:%M:%S"),
-        "",
-        "Working"
+        "", "Working"
     ])
 
-    update.message.reply_text(f"{user} 开始工作 ✅")
+    msg = f"""👤 {cs} {user}
+━━━━━━━━━━━━━━━
+📌 On Duty 成功
+⏰ 时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
+🟢 状态: 正常
+
+Late {late}"""
+
+    update.message.reply_text(msg)
 
 def end(update, context):
     user = update.effective_user.first_name
     now = datetime.now()
 
     if user not in work_sessions:
-        update.message.reply_text("你还没开始工作 ❌")
+        update.message.reply_text("❌ 还没上班")
         return
 
     start_time = work_sessions.pop(user)
     hours = round((now - start_time).total_seconds() / 3600, 2)
 
     sheet.append_row([
-        user,
-        "",
-        "Work End",
+        user, "", "Off Duty",
         now.strftime("%Y-%m-%d %H:%M:%S"),
-        hours,
-        "Ended"
+        hours, "Ended"
     ])
 
-    update.message.reply_text(f"{user} 下班 ✅ 工作 {hours} 小时")
+    msg = f"""👤 {user}
+━━━━━━━━━━━━━━━
+📌 Off Duty 成功
+⏰ 时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
+🕒 工作: {hours} 小时"""
+
+    update.message.reply_text(msg)
 
 def rest(update, context):
     user = update.effective_user.first_name
@@ -88,40 +106,47 @@ def rest(update, context):
     break_sessions[user] = now
 
     sheet.append_row([
-        user,
-        "",
-        "Break Start",
+        user, "", "Break Start",
         now.strftime("%Y-%m-%d %H:%M:%S"),
-        "",
-        "Break"
+        "", "Break"
     ])
 
-    update.message.reply_text(f"{user} 休息中 ☕️")
+    msg = f"""👤 {user}
+━━━━━━━━━━━━━━━
+☕ Break 成功
+⏰ 时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
+📍 状态: Break Start"""
 
+    update.message.reply_text(msg)
+    
 def back(update, context):
     user = update.effective_user.first_name
     now = datetime.now()
 
     if user not in break_sessions:
-        update.message.reply_text("你没有在休息 ❌")
+        update.message.reply_text("❌ 没有休息记录")
         return
 
     start = break_sessions.pop(user)
     minutes = int((now - start).total_seconds() / 60)
 
-    status = "OK" if minutes <= BREAK_LIMIT else "Overtime"
+    status = "正常" if minutes <= BREAK_LIMIT else "超时 ❌"
 
     sheet.append_row([
-        user,
-        "",
-        "Break End",
+        user, "", "Break End",
         now.strftime("%Y-%m-%d %H:%M:%S"),
-        minutes,
-        status
+        minutes, status
     ])
 
-    update.message.reply_text(f"{user} 回来了 ✅ 休息 {minutes} 分钟")
+    msg = f"""👤 {user}
+━━━━━━━━━━━━━━━
+🔙 Break Back 成功
+⏰ 时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
+🕒 休息: {minutes} 分钟
+✅ 状态: {status}"""
 
+    update.message.reply_text(msg)
+    
 def report(update, context):
     records = sheet.get_all_records()
     today = datetime.now().strftime("%Y-%m-%d")
