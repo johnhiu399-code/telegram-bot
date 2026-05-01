@@ -83,9 +83,16 @@ def start(update, context):
 
 # 🟢 上班
 def work(update, context):
-    user = update.effective_user.first_name.upper()
-    now = datetime.now()
+    user_id = update.effective_user.id   # ✅ 放这里
 
+    if user_id not in USER_MAP:
+        update.message.reply_text("❌ 未注册员工")
+        return
+
+    staff_id, name = USER_MAP[user_id]
+
+    now = datetime.now()
+    
     # 找员工编号
     staff_id = None
     for k in STAFF:
