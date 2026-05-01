@@ -8,7 +8,7 @@ from telegram import ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
 # ===== TOKEN =====
-TOKEN = os.environ.get("8625047747:AAGYTTS10t2QlBft8_B4XeU-iyh2fAlNJAs")
+TOKEN = os.environ.get("TOKEN")
 
 # ===== Google Sheet =====
 SHEET_NAME = "1B CS Attendance"
