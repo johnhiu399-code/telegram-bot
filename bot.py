@@ -7,7 +7,7 @@ import os
 from telegram.ext import Updater, CommandHandler
 
 # ===== 配置 =====
-TOKEN = "8625047747:AAHDgZx5xl7LMk67s0nlzjbGHRogNTdAmtE"
+TOKEN = "8625047747:AAGYTTS10t2QlBft8_B4XeU-iyh2fAlNJAs"
 SHEET_NAME = "1B CS Attendance"
 
 BREAK_LIMIT = 30
