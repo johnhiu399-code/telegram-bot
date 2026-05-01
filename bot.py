@@ -180,13 +180,14 @@ Thread(target=run_web).start()
 # ===== 主程序 =====
 if __name__ == "__main__":
 
-    # 启动 Flask（防休眠）
-    from threading import Thread
-    Thread(target=run_web).start()
+    import threading
+
+    t = threading.Thread(target=run_web)
+    t.daemon = True
+    t.start()
 
     updater = Updater(TOKEN, use_context=True)
 
-    # 🔥 清 webhook（防冲突）
     updater.bot.delete_webhook()
 
     dp = updater.dispatcher
@@ -199,5 +200,5 @@ if __name__ == "__main__":
     dp.add_handler(CommandHandler("report", report))
 
     print("BOT RUNNING...")
-    updater.start_polling()
+    updater.start_polling(drop_pending_updates=True)
     updater.idle()
