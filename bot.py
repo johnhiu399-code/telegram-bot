@@ -28,6 +28,7 @@ client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
 
 # ===== 员工名单（必须有）=====
+# ===== 员工 =====
 STAFF = {
     "CS 1": "AVELYN",
     "CS 2": "SAM",
@@ -35,6 +36,16 @@ STAFF = {
     "CS 4": "TERRY",
     "CS 5": "ANSON",
     "CS 6": "NATE"
+}
+
+# ===== 班次 =====
+SHIFT = {
+    "CS 1": (9, 17),
+    "CS 2": (9, 17),
+    "CS 3": (17, 1),
+    "CS 4": (17, 1),
+    "CS 5": (1, 9),
+    "CS 6": (1, 9),
 }
 
 BREAK_LIMIT = 30
@@ -72,36 +83,59 @@ def start(update, context):
 
 # 🟢 上班
 def work(update, context):
-    try:
-        staff = get_staff(update)
-        user = staff["name"]
-        start_time = staff["start"]
+    user = update.effective_user.first_name.upper()
+    now = datetime.now()
 
-        now = datetime.now()
+    # 找员工编号
+    staff_id = None
+    for k in STAFF:
+        if k in user:
+            staff_id = k
+            break
 
-        work_sessions[user] = now
+    if not staff_id:
+        update.message.reply_text("❌ 无法识别员工，请用 CS1/CS2 名字")
+        return
 
-        late = "Late ❌" if is_late(now, start_time) else "On Time ✅"
-        shift = f"{start_time} Shift"
+    name = STAFF[staff_id]
 
-        sheet.append_row([
-            user,
-            "Work Start",
-            now.strftime("%Y-%m-%d %H:%M:%S"),
-            shift,
-            late
-        ])
+    # ===== 判断班次 =====
+    start_hour, end_hour = SHIFT[staff_id]
+    current_hour = now.hour
 
-        msg = f"""👤 {user}
+    # 跨天班（17 → 1）
+    if start_hour > end_hour:
+        if current_hour >= start_hour or current_hour < end_hour:
+            shift_ok = True
+        else:
+            shift_ok = False
+    else:
+        shift_ok = start_hour <= current_hour < end_hour
+
+    # ===== 判断迟到 =====
+    late = now.hour > start_hour or (now.hour == start_hour and now.minute > 0)
+
+    status = "Late ❌" if late else "On Time ✅"
+
+    work_sessions[staff_id] = now
+
+    # ===== 写入Sheet =====
+    sheet.append_row([
+        staff_id,
+        name,
+        "Work Start",
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        "",
+        status
+    ])
+
+    # ===== 输出 =====
+    msg = f"""👤 {staff_id} {name}
 📌 On Duty 成功
-🕒 班次: {shift}
 ⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
-{late}"""
+{status}"""
 
-        update.message.reply_text(msg)
-
-    except Exception as e:
-        update.message.reply_text(f"❌ Error: {e}")
+    update.message.reply_text(msg)
 
 # 🔴 下班
 def end(update, context):
