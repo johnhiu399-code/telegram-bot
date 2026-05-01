@@ -81,7 +81,7 @@ def get_shift_start(now, start_hour):
 # ===== START =====
 def start(update, context):
     update.message.reply_text(
-        "系统已启动 ✅\n/work 上班\n/end 下班\n/rest 休息\n/back 回来"
+        "1B打卡系统已启动 请选择✅\n/work 上班\n/end 下班\n/rest 休息\n/back 回来"
     )
 
 # ===== WORK =====
