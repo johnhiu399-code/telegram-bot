@@ -9,30 +9,34 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 # ===== TOKEN =====
 TOKEN = os.environ.get("TOKEN")
 
-# ===== 马来西亚时间 =====
+if not TOKEN:
+    print("❌ TOKEN missing")
+    exit()
+
+# ===== 时区（马来西亚）=====
 tz = pytz.timezone("Asia/Kuala_Lumpur")
 
-# ===== 员工 + 班次 =====
+# ===== 员工 & 班次 =====
 STAFF = {
     "CS 1": {"name": "AVELYN", "start": time(9, 0), "end": time(17, 0)},
-    "CS 2": {"name": "SAM", "start": time(1, 0), "end": time(9, 0)},
     "CS 3": {"name": "JOHN", "start": time(17, 0), "end": time(1, 0)},
     "CS 4": {"name": "TERRY", "start": time(17, 0), "end": time(1, 0)},
+    "CS 2": {"name": "SAM", "start": time(1, 0), "end": time(9, 0)},
     "CS 5": {"name": "ANSON", "start": time(1, 0), "end": time(9, 0)},
 }
 
-# ===== 状态 =====
+# ===== 内存 =====
 work_sessions = {}
 break_sessions = {}
 
 logging.basicConfig(level=logging.INFO)
 
-# ===== 菜单 =====
-menu = ReplyKeyboardMarkup([
-    ["🟢 On Duty", "🔴 Off Duty"],
-    ["☕ Break", "✅ Back"],
-], resize_keyboard=True)
-
+# ===== Menu =====
+menu = ReplyKeyboardMarkup(
+    [["🟢 On Duty", "🔴 Off Duty"],
+     ["☕ Break", "✅ Back"]],
+    resize_keyboard=True
+)
 
 # ===== 获取员工 =====
 def get_staff(update):
@@ -40,68 +44,59 @@ def get_staff(update):
 
     if tg_name in STAFF:
         data = STAFF[tg_name]
-        return tg_name, data["name"], data["start"], data["end"]
+        return tg_name, data["name"], data["start"]
 
-    return tg_name, "Unknown", None, None
+    return tg_name, "Unknown", None
 
+# ===== 判断迟到 =====
+def check_late(now, start_time):
+    if not start_time:
+        return "Unknown"
 
-# ===== 判断 Early / On Time / Late =====
-def check_status(now, start_time):
-    now_time = now.time()
+    start_dt = now.replace(hour=start_time.hour, minute=start_time.minute, second=0)
 
-    if now_time < start_time:
-        return "Early 🟡"
-    elif now_time == start_time:
+    # 跨天班（例如 17:00-1:00）
+    if start_time.hour > now.hour:
+        start_dt = start_dt.replace(day=now.day - 1)
+
+    if now <= start_dt:
         return "On Time ✅"
     else:
         return "Late ❌"
 
-
 # ===== Start =====
 def start(update, context):
-    update.message.reply_text("系统已启动 ✅\n请选择操作👇", reply_markup=menu)
+    update.message.reply_text(
+        "系统已启动 ✅\n请选择操作👇",
+        reply_markup=menu
+    )
 
-
-# ===== On Duty =====
+# ===== 上班 =====
 def work(update, context):
     now = datetime.now(tz)
-    user_id = update.effective_user.id
+    staff, name, start_time = get_staff(update)
 
-    staff, name, start_time, end_time = get_staff(update)
+    status = check_late(now, start_time)
 
-    if start_time is None:
-        update.message.reply_text("❌ 未注册员工")
-        return
-
-    if user_id in work_sessions:
-        update.message.reply_text("❌ 你已经在上班")
-        return
-
-    status = check_status(now, start_time)
-
-    work_sessions[user_id] = now
+    work_sessions[staff] = now
 
     update.message.reply_text(
         f"""👤 {staff} {name}
 🟢 On Duty 成功
-🕒 班次: {start_time.strftime("%H:%M")} - {end_time.strftime("%H:%M")}
 ⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
 {status}"""
     )
 
-
-# ===== Off Duty =====
+# ===== 下班 =====
 def end(update, context):
     now = datetime.now(tz)
-    user_id = update.effective_user.id
+    staff, name, _ = get_staff(update)
 
-    staff, name, _, _ = get_staff(update)
-
-    if user_id not in work_sessions:
+    if staff not in work_sessions:
         update.message.reply_text("❌ 你还没上班")
         return
 
-    start_time = work_sessions.pop(user_id)
+    start_time = work_sessions.pop(staff)
     hours = round((now - start_time).total_seconds() / 3600, 2)
 
     update.message.reply_text(
@@ -111,15 +106,12 @@ def end(update, context):
 🕒 工作: {hours} 小时"""
     )
 
-
-# ===== Break =====
+# ===== 休息 =====
 def rest(update, context):
     now = datetime.now(tz)
-    user_id = update.effective_user.id
+    staff, name, _ = get_staff(update)
 
-    staff, name, _, _ = get_staff(update)
-
-    break_sessions[user_id] = now
+    break_sessions[staff] = now
 
     update.message.reply_text(
         f"""👤 {staff} {name}
@@ -127,35 +119,27 @@ def rest(update, context):
 ⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}"""
     )
 
-
-# ===== Back =====
+# ===== 回来 =====
 def back(update, context):
     now = datetime.now(tz)
-    user_id = update.effective_user.id
+    staff, name, _ = get_staff(update)
 
-    staff, name, _, _ = get_staff(update)
-
-    if user_id not in break_sessions:
-        update.message.reply_text("❌ 没有在休息")
+    if staff not in break_sessions:
+        update.message.reply_text("❌ 你没有在休息")
         return
 
-    start = break_sessions.pop(user_id)
-
+    start = break_sessions.pop(staff)
     seconds = int((now - start).total_seconds())
     minutes = seconds // 60
-
-    status = "OK ✅" if minutes <= 30 else "Overtime ❌"
 
     update.message.reply_text(
         f"""👤 {staff} {name}
 ✅ Break Back 成功
 ⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
-☕ 休息: {minutes} 分钟 ({seconds} 秒)
-{status}"""
+☕ 休息: {minutes} 分钟 ({seconds} 秒)"""
     )
 
-
-# ===== 按钮处理 =====
+# ===== 按钮控制 =====
 def handle_message(update, context):
     text = update.message.text
 
@@ -168,6 +152,21 @@ def handle_message(update, context):
     elif text == "✅ Back":
         back(update, context)
 
+# ===== Flask 防休眠 =====
+from flask import Flask
+from threading import Thread
+
+web = Flask(__name__)
+
+@web.route("/")
+def home():
+    return "Bot is alive"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    web.run(host="0.0.0.0", port=port)
+
+Thread(target=run_web).start()
 
 # ===== 启动 =====
 updater = Updater(TOKEN, use_context=True)
