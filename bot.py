@@ -86,7 +86,7 @@ def log_sheet(name, staff, action, now, value="", status=""):
 
 # ===== Start =====
 def start(update, context):
-    update.message.reply_text("系统已启动 ✅", reply_markup=menu)
+    update.message.reply_text("1B打卡系统已启动 ✅，请选择👇🏻", reply_markup=menu)
 
 # ===== On Duty =====
 def work(update, context):
