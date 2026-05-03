@@ -67,7 +67,7 @@ def check_late(now, start_time):
 # ===== Start =====
 def start(update, context):
     update.message.reply_text(
-        "系统已启动 ✅\n请选择操作👇",
+        "1BCS打卡系统已启动 ✅\n请选择操作👇",
         reply_markup=menu
     )
 
