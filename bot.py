@@ -1,150 +1,107 @@
 import logging
-from datetime import datetime, timedelta
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import os
+from datetime import datetime, time
+import pytz
 
+from telegram import ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-
-# ===== 时区（Malaysia）=====
-from zoneinfo import ZoneInfo
-MY_TZ = ZoneInfo("Asia/Kuala_Lumpur")
 
 # ===== TOKEN =====
 TOKEN = os.environ.get("TOKEN")
 
-SHEET_NAME = "1B CS Attendance"
-BREAK_LIMIT = 30
+# ===== 马来西亚时间 =====
+tz = pytz.timezone("Asia/Kuala_Lumpur")
 
-# ===== 班次 =====
-SHIFT = {
-    "CS 1": (9, 17),
-    "CS 2": (9, 17),
-    "CS 3": (17, 1),
-    "CS 4": (17, 1),
-    "CS 5": (1, 9),
-    "CS 6": (1, 9),
+# ===== 员工 + 班次 =====
+STAFF = {
+    "CS 1": {"name": "AVELYN", "start": time(9, 0), "end": time(17, 0)},
+    "CS 2": {"name": "SAM", "start": time(1, 0), "end": time(9, 0)},
+    "CS 3": {"name": "JOHN", "start": time(17, 0), "end": time(1, 0)},
+    "CS 4": {"name": "TERRY", "start": time(17, 0), "end": time(1, 0)},
+    "CS 5": {"name": "ANSON", "start": time(1, 0), "end": time(9, 0)},
 }
 
-# ===== 名字 =====
-NAME_MAP = {
-    "CS 1": "AVELYN",
-    "CS 2": "SAM",
-    "CS 3": "JOHN",
-    "CS 4": "TERRY",
-    "CS 5": "ANSON",
-    "CS 6": "NATE",
-}
-
-# ===== Google Sheet =====
-scope = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
-]
-
-if os.path.exists("/etc/secrets/credentials.json"):
-    CREDS_FILE = "/etc/secrets/credentials.json"
-else:
-    CREDS_FILE = "credentials.json"
-
-creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope)
-client = gspread.authorize(creds)
-sheet = client.open(SHEET_NAME).sheet1
-
-# ===== 内存 =====
+# ===== 状态 =====
 work_sessions = {}
 break_sessions = {}
 
 logging.basicConfig(level=logging.INFO)
 
+# ===== 菜单 =====
+menu = ReplyKeyboardMarkup([
+    ["🟢 On Duty", "🔴 Off Duty"],
+    ["☕ Break", "✅ Back"],
+], resize_keyboard=True)
+
+
 # ===== 获取员工 =====
 def get_staff(update):
-    staff = update.effective_user.first_name.strip().upper()
-    if staff not in SHIFT:
-        return None, None
-    return staff, NAME_MAP.get(staff, "UNKNOWN")
+    tg_name = update.effective_user.first_name
 
-# ===== Malaysia 时间 =====
-def now_my():
-    return datetime.now(MY_TZ)
+    if tg_name in STAFF:
+        data = STAFF[tg_name]
+        return tg_name, data["name"], data["start"], data["end"]
 
-# ===== 计算班次开始时间（重点）=====
-def get_shift_start(now, start_hour):
-    shift_start = now.replace(hour=start_hour, minute=0, second=0, microsecond=0)
+    return tg_name, "Unknown", None, None
 
-    # 跨天处理（例如 1AM 班）
-    if now.hour < start_hour:
-        shift_start = shift_start - timedelta(days=1)
 
-    return shift_start
+# ===== 判断 Early / On Time / Late =====
+def check_status(now, start_time):
+    now_time = now.time()
 
-# ===== START =====
+    if now_time < start_time:
+        return "Early 🟡"
+    elif now_time == start_time:
+        return "On Time ✅"
+    else:
+        return "Late ❌"
+
+
+# ===== Start =====
 def start(update, context):
-    update.message.reply_text(
-        "1B打卡系统已启动 请选择✅\n/work 上班\n/end 下班\n/rest 休息\n/back 回来"
-    )
+    update.message.reply_text("系统已启动 ✅\n请选择操作👇", reply_markup=menu)
 
-# ===== WORK =====
+
+# ===== On Duty =====
 def work(update, context):
-    staff, name = get_staff(update)
-    now = now_my()
+    now = datetime.now(tz)
+    user_id = update.effective_user.id
 
-    if not staff:
-        update.message.reply_text("❌ 请把名字改成 CS 1 / CS 2...")
+    staff, name, start_time, end_time = get_staff(update)
+
+    if start_time is None:
+        update.message.reply_text("❌ 未注册员工")
         return
 
-    if staff in work_sessions:
-        update.message.reply_text("⚠️ 已在上班中")
+    if user_id in work_sessions:
+        update.message.reply_text("❌ 你已经在上班")
         return
 
-    work_sessions[staff] = now
+    status = check_status(now, start_time)
 
-    start_hour, _ = SHIFT[staff]
-    shift_start = get_shift_start(now, start_hour)
-
-    late = now > shift_start
-    status = "Late ❌" if late else "On Time ✅"
-
-    sheet.append_row([
-        staff,
-        name,
-        "Work Start",
-        now.strftime("%Y-%m-%d %H:%M:%S"),
-        "",
-        status
-    ])
+    work_sessions[user_id] = now
 
     update.message.reply_text(
         f"""👤 {staff} {name}
 🟢 On Duty 成功
+🕒 班次: {start_time.strftime("%H:%M")} - {end_time.strftime("%H:%M")}
 ⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
 {status}"""
     )
 
-# ===== END =====
+
+# ===== Off Duty =====
 def end(update, context):
-    staff, name = get_staff(update)
-    now = now_my()
+    now = datetime.now(tz)
+    user_id = update.effective_user.id
 
-    if not staff:
-        update.message.reply_text("❌ 未识别员工")
-        return
+    staff, name, _, _ = get_staff(update)
 
-    if staff not in work_sessions:
+    if user_id not in work_sessions:
         update.message.reply_text("❌ 你还没上班")
         return
 
-    start_time = work_sessions.pop(staff)
+    start_time = work_sessions.pop(user_id)
     hours = round((now - start_time).total_seconds() / 3600, 2)
-
-    sheet.append_row([
-        staff,
-        name,
-        "Work End",
-        now.strftime("%Y-%m-%d %H:%M:%S"),
-        hours,
-        "Ended"
-    ])
 
     update.message.reply_text(
         f"""👤 {staff} {name}
@@ -153,38 +110,40 @@ def end(update, context):
 🕒 工作: {hours} 小时"""
     )
 
-# ===== REST =====
+
+# ===== Break =====
 def rest(update, context):
-    staff, name = get_staff(update)
-    now = now_my()
+    now = datetime.now(tz)
+    user_id = update.effective_user.id
 
-    if not staff:
-        update.message.reply_text("❌ 未识别员工")
-        return
+    staff, name, _, _ = get_staff(update)
 
-    break_sessions[staff] = now
+    break_sessions[user_id] = now
 
-    update.message.reply_text(f"☕ {staff} {name}\nBreak 开始")
+    update.message.reply_text(
+        f"""👤 {staff} {name}
+☕ Break 开始
+⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}"""
+    )
 
-# ===== BACK =====
+
+# ===== Back =====
 def back(update, context):
-    staff, name = get_staff(update)
-    now = now_my()
+    now = datetime.now(tz)
+    user_id = update.effective_user.id
 
-    if not staff:
-        update.message.reply_text("❌ 未识别员工")
+    staff, name, _, _ = get_staff(update)
+
+    if user_id not in break_sessions:
+        update.message.reply_text("❌ 没有在休息")
         return
 
-    if staff not in break_sessions:
-        update.message.reply_text("❌ 没在休息")
-        return
-
-    start = break_sessions.pop(staff)
+    start = break_sessions.pop(user_id)
 
     seconds = int((now - start).total_seconds())
     minutes = seconds // 60
 
-    status = "OK ✅" if minutes <= BREAK_LIMIT else "Overtime ❌"
+    status = "OK ✅" if minutes <= 30 else "Overtime ❌"
 
     update.message.reply_text(
         f"""👤 {staff} {name}
@@ -194,47 +153,29 @@ def back(update, context):
 {status}"""
     )
 
-# ===== 按钮识别 =====
-def handle_message(update, context):
-    text = update.message.text.lower()
 
-    if "on duty" in text:
+# ===== 按钮处理 =====
+def handle_message(update, context):
+    text = update.message.text
+
+    if text == "🟢 On Duty":
         work(update, context)
-    elif "off duty" in text:
+    elif text == "🔴 Off Duty":
         end(update, context)
-    elif "break" in text and "back" not in text:
+    elif text == "☕ Break":
         rest(update, context)
-    elif "back" in text:
+    elif text == "✅ Back":
         back(update, context)
 
-# ===== Flask =====
-from flask import Flask
-from threading import Thread
 
-web = Flask(__name__)
-
-@web.route("/")
-def home():
-    return "Bot is alive"
-
-def run_web():
-    web.run(host="0.0.0.0", port=10000)
-
-Thread(target=run_web).start()
-
-# ===== 主程序 =====
+# ===== 启动 =====
 updater = Updater(TOKEN, use_context=True)
 updater.bot.delete_webhook()
 
 dp = updater.dispatcher
 
 dp.add_handler(CommandHandler("start", start))
-dp.add_handler(CommandHandler("work", work))
-dp.add_handler(CommandHandler("end", end))
-dp.add_handler(CommandHandler("rest", rest))
-dp.add_handler(CommandHandler("back", back))
-
-dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+dp.add_handler(MessageHandler(Filters.text, handle_message))
 
 print("BOT RUNNING...")
 updater.start_polling()
