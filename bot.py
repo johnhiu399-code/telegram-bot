@@ -2,28 +2,44 @@ import os
 import logging
 from datetime import datetime, time
 import pytz
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
 # ===== TOKEN =====
 TOKEN = os.environ.get("TOKEN")
-
 if not TOKEN:
     print("❌ TOKEN missing")
     exit()
 
-# ===== 时区（马来西亚）=====
+# ===== 时区 =====
 tz = pytz.timezone("Asia/Kuala_Lumpur")
 
-# ===== 员工 & 班次 =====
+# ===== 员工 =====
 STAFF = {
-    "CS 1": {"name": "AVELYN", "start": time(9, 0), "end": time(17, 0)},
-    "CS 3": {"name": "JOHN", "start": time(17, 0), "end": time(1, 0)},
-    "CS 4": {"name": "TERRY", "start": time(17, 0), "end": time(1, 0)},
-    "CS 2": {"name": "SAM", "start": time(1, 0), "end": time(9, 0)},
-    "CS 5": {"name": "ANSON", "start": time(1, 0), "end": time(9, 0)},
+    "CS 1": {"name": "AVELYN", "start": time(9, 0)},
+    "CS 3": {"name": "JOHN", "start": time(17, 0)},
+    "CS 4": {"name": "TERRY", "start": time(17, 0)},
+    "CS 2": {"name": "SAM", "start": time(1, 0)},
+    "CS 5": {"name": "ANSON", "start": time(1, 0)},
 }
+
+# ===== Google Sheet =====
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
+
+if os.path.exists("/etc/secrets/credentials.json"):
+    CREDS_FILE = "/etc/secrets/credentials.json"
+else:
+    CREDS_FILE = "credentials.json"
+
+creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope)
+client = gspread.authorize(creds)
+sheet = client.open("1B CS Attendance").sheet1
 
 # ===== 内存 =====
 work_sessions = {}
@@ -48,37 +64,43 @@ def get_staff(update):
 
     return tg_name, "Unknown", None
 
-# ===== 判断迟到 =====
+# ===== Late 判断 =====
 def check_late(now, start_time):
-    if not start_time:
-        return "Unknown"
+    start_dt = now.replace(hour=start_time.hour, minute=0, second=0)
 
-    start_dt = now.replace(hour=start_time.hour, minute=start_time.minute, second=0)
-
-    # 跨天班（例如 17:00-1:00）
     if start_time.hour > now.hour:
         start_dt = start_dt.replace(day=now.day - 1)
 
-    if now <= start_dt:
-        return "On Time ✅"
-    else:
-        return "Late ❌"
+    return "On Time ✅" if now <= start_dt else "Late ❌"
+
+# ===== 写入 Sheet =====
+def log_sheet(name, staff, action, now, value="", status=""):
+    sheet.append_row([
+        name,
+        staff,
+        action,
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        value,
+        status
+    ])
 
 # ===== Start =====
 def start(update, context):
-    update.message.reply_text(
-        "1BCS打卡系统已启动 ✅\n请选择操作👇",
-        reply_markup=menu
-    )
+    update.message.reply_text("系统已启动 ✅", reply_markup=menu)
 
-# ===== 上班 =====
+# ===== On Duty =====
 def work(update, context):
     now = datetime.now(tz)
     staff, name, start_time = get_staff(update)
 
-    status = check_late(now, start_time)
+    if staff in work_sessions:
+        update.message.reply_text("❌ 已经在上班了")
+        return
 
+    status = check_late(now, start_time)
     work_sessions[staff] = now
+
+    log_sheet(name, staff, "On Duty", now, "", status)
 
     update.message.reply_text(
         f"""👤 {staff} {name}
@@ -87,7 +109,7 @@ def work(update, context):
 {status}"""
     )
 
-# ===== 下班 =====
+# ===== Off Duty =====
 def end(update, context):
     now = datetime.now(tz)
     staff, name, _ = get_staff(update)
@@ -99,6 +121,8 @@ def end(update, context):
     start_time = work_sessions.pop(staff)
     hours = round((now - start_time).total_seconds() / 3600, 2)
 
+    log_sheet(name, staff, "Off Duty", now, hours, "Ended")
+
     update.message.reply_text(
         f"""👤 {staff} {name}
 🔴 Off Duty 成功
@@ -106,12 +130,18 @@ def end(update, context):
 🕒 工作: {hours} 小时"""
     )
 
-# ===== 休息 =====
+# ===== Break =====
 def rest(update, context):
     now = datetime.now(tz)
     staff, name, _ = get_staff(update)
 
+    if staff in break_sessions:
+        update.message.reply_text("❌ 已经在休息中")
+        return
+
     break_sessions[staff] = now
+
+    log_sheet(name, staff, "Break Start", now)
 
     update.message.reply_text(
         f"""👤 {staff} {name}
@@ -119,18 +149,20 @@ def rest(update, context):
 ⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}"""
     )
 
-# ===== 回来 =====
+# ===== Back =====
 def back(update, context):
     now = datetime.now(tz)
     staff, name, _ = get_staff(update)
 
     if staff not in break_sessions:
-        update.message.reply_text("❌ 你没有在休息")
+        update.message.reply_text("❌ 没有在休息")
         return
 
     start = break_sessions.pop(staff)
     seconds = int((now - start).total_seconds())
     minutes = seconds // 60
+
+    log_sheet(name, staff, "Break End", now, minutes, "OK")
 
     update.message.reply_text(
         f"""👤 {staff} {name}
@@ -139,7 +171,20 @@ def back(update, context):
 ☕ 休息: {minutes} 分钟 ({seconds} 秒)"""
     )
 
-# ===== 按钮控制 =====
+# ===== Report =====
+def report(update, context):
+    records = sheet.get_all_records()
+    today = datetime.now(tz).strftime("%Y-%m-%d")
+
+    result = "📊 今日记录\n\n"
+
+    for r in records:
+        if today in str(r.get("Time", "")):
+            result += f"{r.get('Name')} | {r.get('Action')} | {r.get('Time')}\n"
+
+    update.message.reply_text(result if result else "暂无记录")
+
+# ===== Message =====
 def handle_message(update, context):
     text = update.message.text
 
@@ -152,7 +197,7 @@ def handle_message(update, context):
     elif text == "✅ Back":
         back(update, context)
 
-# ===== Flask 防休眠 =====
+# ===== Flask =====
 from flask import Flask
 from threading import Thread
 
@@ -168,15 +213,16 @@ def run_web():
 
 Thread(target=run_web).start()
 
-# ===== 启动 =====
+# ===== Run =====
 updater = Updater(TOKEN, use_context=True)
 updater.bot.delete_webhook()
 
 dp = updater.dispatcher
 
 dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CommandHandler("report", report))
 dp.add_handler(MessageHandler(Filters.text, handle_message))
 
-print("BOT RUNNING...")
+print("🔥 BOT PRO+ RUNNING")
 updater.start_polling()
 updater.idle()
