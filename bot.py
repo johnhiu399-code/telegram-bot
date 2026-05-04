@@ -27,7 +27,7 @@ scope = [
 CREDS_FILE = "/etc/secrets/credentials.json" if os.path.exists("/etc/secrets/credentials.json") else "credentials.json"
 creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope)
 client = gspread.authorize(creds)
-sheet = client.open("CS Attendance").sheet1
+sheet = client.open("1B CS Attendance").sheet1
 
 # ===== 内存 =====
 work_sessions = {}   # {staff: start_datetime}
