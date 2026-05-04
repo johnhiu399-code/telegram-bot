@@ -44,16 +44,18 @@ menu = ReplyKeyboardMarkup(
 
 # ===== 解析名字：CS 3 (John) =====
 def get_staff(update):
-    tg_name = (update.effective_user.first_name or "").strip()
+    tg_name = update.effective_user.full_name.strip()
 
     if "(" in tg_name and ")" in tg_name:
         try:
-            staff = tg_name.split("(")[0].strip()       # CS 3
-            name = tg_name.split("(")[1].replace(")", "").strip()  # John
+            staff = tg_name.split("(")[0].strip()
+            name = tg_name.split("(")[1].replace(")", "").strip()
         except:
-            staff, name = tg_name, tg_name
+            staff = tg_name
+            name = tg_name
     else:
-        staff, name = tg_name, tg_name
+        staff = tg_name
+        name = tg_name
 
     return staff, name
 
