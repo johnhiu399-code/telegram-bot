@@ -206,6 +206,9 @@ def handle_message(update, context):
         rest(update, context)
     elif text == "✅ Back":
         back(update, context)
+    else:
+        # 👉 强制显示按钮（关键）
+        update.message.reply_text("请选择操作👇", reply_markup=menu)
 
 # ===== 保持 Render 在线 =====
 from flask import Flask
