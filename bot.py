@@ -2,6 +2,8 @@ import os
 import logging
 from datetime import datetime, time, timedelta
 import pytz
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
@@ -12,8 +14,23 @@ if not TOKEN:
     print("❌ TOKEN missing")
     exit()
 
-# ===== 时区（马来西亚）=====
+# ===== 时区 =====
 tz = pytz.timezone("Asia/Kuala_Lumpur")
+
+# ===== Google Sheet =====
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
+
+if os.path.exists("/etc/secrets/credentials.json"):
+    CREDS_FILE = "/etc/secrets/credentials.json"
+else:
+    CREDS_FILE = "credentials.json"
+
+creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope)
+client = gspread.authorize(creds)
+sheet = client.open("1B CS Attendance").sheet1
 
 # ===== 内存 =====
 work_sessions = {}
@@ -21,14 +38,14 @@ break_sessions = {}
 
 logging.basicConfig(level=logging.INFO)
 
-# ===== 菜单 =====
+# ===== Menu =====
 menu = ReplyKeyboardMarkup(
     [["🟢 On Duty", "🔴 Off Duty"],
      ["☕ Break", "✅ Back"]],
     resize_keyboard=True
 )
 
-# ===== 解析名字（CS 3 (John)）=====
+# ===== 解析名字 =====
 def get_staff(update):
     tg_name = update.effective_user.first_name.strip()
 
@@ -55,7 +72,7 @@ def get_shift(staff):
         return time(1, 0)
     return None
 
-# ===== Late 判断（已修复跨天）=====
+# ===== Late 判断 =====
 def check_late(now, start_time):
     if not start_time:
         return "Unknown"
@@ -67,21 +84,30 @@ def check_late(now, start_time):
         microsecond=0
     )
 
-    # 晚班（17:00 → 次日）
     if start_time.hour == 17:
         if now.hour < 12:
             start_dt -= timedelta(days=1)
 
-    # 凌晨班（1:00）
     if start_time.hour == 1:
         if now.hour >= 9:
             start_dt -= timedelta(days=1)
 
     return "On Time ✅" if now <= start_dt else "Late ❌"
 
+# ===== 写入 Sheet =====
+def log_sheet(staff, name, action, now, value="", status=""):
+    sheet.append_row([
+        staff,
+        name,
+        action,
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        value,
+        status
+    ])
+
 # ===== Start =====
 def start(update, context):
-    update.message.reply_text("1B打卡系统已启动 ✅ 请选择", reply_markup=menu)
+    update.message.reply_text("1B打卡系统已启动 ✅请选择👇🏻", reply_markup=menu)
 
 # ===== 上班 =====
 def work(update, context):
@@ -96,6 +122,8 @@ def work(update, context):
     status = check_late(now, start_time)
 
     work_sessions[staff] = now
+
+    log_sheet(staff, name, "On Duty", now, "", status)
 
     update.message.reply_text(
         f"""👤 {staff} ({name})
@@ -116,6 +144,8 @@ def end(update, context):
     start_time = work_sessions.pop(staff)
     hours = round((now - start_time).total_seconds() / 3600, 2)
 
+    log_sheet(staff, name, "Off Duty", now, hours, "Ended")
+
     update.message.reply_text(
         f"""👤 {staff} ({name})
 🔴 Off Duty 成功
@@ -133,6 +163,8 @@ def rest(update, context):
         return
 
     break_sessions[staff] = now
+
+    log_sheet(staff, name, "Break Start", now)
 
     update.message.reply_text(
         f"""👤 {staff} ({name})
@@ -153,6 +185,8 @@ def back(update, context):
     seconds = int((now - start).total_seconds())
     minutes = seconds // 60
 
+    log_sheet(staff, name, "Break End", now, minutes, "OK")
+
     update.message.reply_text(
         f"""👤 {staff} ({name})
 ✅ Break Back 成功
@@ -160,7 +194,7 @@ def back(update, context):
 ☕ 休息: {minutes} 分钟 ({seconds} 秒)"""
     )
 
-# ===== 按钮处理 =====
+# ===== Message =====
 def handle_message(update, context):
     text = update.message.text
 
@@ -173,7 +207,7 @@ def handle_message(update, context):
     elif text == "✅ Back":
         back(update, context)
 
-# ===== Flask 防 Render 睡觉 =====
+# ===== Flask =====
 from flask import Flask
 from threading import Thread
 
@@ -198,6 +232,6 @@ dp = updater.dispatcher
 dp.add_handler(CommandHandler("start", start))
 dp.add_handler(MessageHandler(Filters.text, handle_message))
 
-print("🔥 BOT RUNNING")
+print("🔥 BOT PRO++ RUNNING")
 updater.start_polling()
 updater.idle()
