@@ -230,7 +230,7 @@ updater.bot.delete_webhook()
 dp = updater.dispatcher
 
 dp.add_handler(CommandHandler("start", start))
-dp.add_handler(MessageHandler(Filters.text, handle_message))
+MessageHandler(Filters.text & ~Filters.command, handle_message)
 
 print("🔥 BOT PRO++ RUNNING")
 updater.start_polling()
