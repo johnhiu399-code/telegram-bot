@@ -157,9 +157,6 @@ def work(update, context):
         update.message.reply_text("❌ 已经在上班了")
         return
 
-    start_time = get_shift(staff)
-    status = check_late(now, start_time)
-
     work_sessions[staff] = now
 
     log_sheet(staff, name, "On Duty", now, "", status)
