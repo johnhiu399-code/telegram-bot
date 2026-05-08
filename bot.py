@@ -59,17 +59,44 @@ def get_staff(update):
 
     return staff, name
 
-# ===== 班次（按你最新配置）=====
-# 1:00AM - 9:00AM : CS 2, CS 5
-# 9:00AM - 5:00PM : CS 1
-# 5:00PM - 1:00AM : CS 3, CS 4
+# ===== 班次系统 =====
+# 9:00AM - 5:00PM
+# CS 1 (Avelyn)
+# CS 2 (Ed)
+
+# 5:00PM - 1:00AM
+# CS 3 (John)
+# CS 4 (Terry)
+
+# 1:00AM - 9:00AM
+# CS 5 (Sam)
+
 def get_shift(staff):
-    if staff == "CS 1":
-        return time(9, 0)
+
+    # ===== 早班 =====
+    if staff in ["CS 1", "CS 2"]:
+        return {
+            "start": time(9, 0),
+            "end": time(17, 0),
+            "shift": "9:00AM - 5:00PM"
+        }
+
+    # ===== 晚班 =====
     elif staff in ["CS 3", "CS 4"]:
-        return time(17, 0)
-    elif staff in ["CS 2", "CS 5"]:
-        return time(1, 0)
+        return {
+            "start": time(17, 0),
+            "end": time(1, 0),
+            "shift": "5:00PM - 1:00AM"
+        }
+
+    # ===== 凌晨班 =====
+    elif staff in ["CS 5"]:
+        return {
+            "start": time(1, 0),
+            "end": time(9, 0),
+            "shift": "1:00AM - 9:00AM"
+        }
+
     return None
 
 # ===== Late 判断（含跨天）=====
@@ -104,12 +131,23 @@ def log_sheet(staff, name, action, now, value="", status=""):
 
 # ===== Start =====
 def start(update, context):
-    update.message.reply_text("系统已启动 ✅\n请选择操作👇", reply_markup=menu)
+    update.message.reply_text("1BCS打卡系统已启动 ✅\n请选择操作👇", reply_markup=menu)
 
 # ===== On Duty =====
 def work(update, context):
     now = datetime.now(tz)
     staff, name = get_staff(update)
+
+    shift_data = get_shift(staff)
+
+    if not shift_data:
+        update.message.reply_text("❌ 找不到你的班次")
+        return
+
+    start_time = shift_data["start"]
+    shift_name = shift_data["shift"]
+
+    status = check_late(now, start_time)
 
     if not staff:
         update.message.reply_text("❌ 无法识别你的名字（请设置为：CS X (Name)）")
@@ -130,6 +168,7 @@ def work(update, context):
         f"""👤 {staff} ({name})
 🟢 On Duty 成功
 ⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
+📋 班次: {shift_name}
 {status}"""
     )
 
