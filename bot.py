@@ -198,18 +198,40 @@ def back(update, context):
 def handle_message(update, context):
     text = update.message.text
 
+    # ===== 只允许员工 =====
+    allowed_staff = [
+        "CS 1 (Avelyn)",
+        "CS 2 (Ed)",
+        CS 3 (John)",
+        "CS 4 (Terry)",
+        "CS 5 (Sam)"
+    ]
+
+    staff, name = get_staff(update)
+
+    # ❌ 非员工直接无视
+    if staff not in allowed_staff:
+        return
+
+    # ===== 按钮 =====
     if text == "🟢 On Duty":
         work(update, context)
+
     elif text == "🔴 Off Duty":
         end(update, context)
-    elif text == "☕ Break":
+
+    elif text == "☕️ Break":
         rest(update, context)
+
     elif text == "✅ Back":
         back(update, context)
-    else:
-        # 👉 强制显示按钮（关键）
-        update.message.reply_text("请选择操作👇", reply_markup=menu)
 
+    else:
+        # ✅ 只有员工讲话才显示按钮
+        update.message.reply_text(
+            "请选择操作👇",
+            reply_markup=menu
+        )
 # ===== 保持 Render 在线 =====
 from flask import Flask
 from threading import Thread
