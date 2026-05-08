@@ -202,7 +202,7 @@ def handle_message(update, context):
     allowed_staff = [
         "CS 1 (Avelyn)",
         "CS 2 (Ed)",
-        CS 3 (John)",
+        "CS 3 (John)",
         "CS 4 (Terry)",
         "CS 5 (Sam)"
     ]
