@@ -1,28 +1,65 @@
 import os
 import logging
-from datetime import datetime, time
-import pytz
+from datetime import datetime, time, timedelta
 
+import pytz
 import gspread
+
 from oauth2client.service_account import ServiceAccountCredentials
 
 from telegram import ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import (
+    Updater,
+    CommandHandler,
+    MessageHandler,
+    Filters
+)
 
-# ===== TOKEN =====
+from flask import Flask
+from threading import Thread
+
+# =========================
+# TOKEN
+# =========================
 TOKEN = os.environ.get("TOKEN")
 
-# ===== TIMEZONE =====
+# =========================
+# TIMEZONE
+# =========================
 tz = pytz.timezone("Asia/Kuala_Lumpur")
 
-# ===== LOG =====
+# =========================
+# GOOGLE SHEET
+# =========================
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
+
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    "credentials.json",
+    scope
+)
+
+client = gspread.authorize(creds)
+
+# 改成你的 Google Sheet 名字
+sheet = client.open("CS Attendance").sheet1
+
+# =========================
+# LOGGING
+# =========================
 logging.basicConfig(level=logging.INFO)
 
-# ===== MEMORY =====
+# =========================
+# SESSION STORAGE
+# =========================
 work_sessions = {}
 break_sessions = {}
 
-# ===== MENU =====
+# =========================
+# BUTTON MENU
+# =========================
 menu = ReplyKeyboardMarkup(
     [
         ["🟢 On Duty", "🔴 Off Duty"],
@@ -31,69 +68,37 @@ menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# ===== GOOGLE SHEET =====
-scope = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
-]
-
-creds = ServiceAccountCredentials.from_json_keyfile_name(
-    "/etc/secrets/credentials.json",
-    scope
-)
-
-client = gspread.authorize(creds)
-
-sheet = client.open("1B CS Attendance").sheet1
-
-# ===== GET STAFF =====
-def get_staff(update):
-
-    tg_name = update.effective_user.full_name.strip()
-
-    # 统一空格
-    tg_name = " ".join(tg_name.split())
-
-    return tg_name, tg_name
-
-
-# ===== SHIFT SYSTEM =====
+# =========================
+# SHIFT SYSTEM
+# =========================
 def get_shift(staff):
 
-    staff = staff.strip()
-
-    # ===== 9AM - 5PM =====
-    if staff == "CS 1 (Avelyn)":
+    # 9AM - 5PM
+    if staff in [
+        "CS 1 (Avelyn)",
+        "CS 2 (Ed)"
+    ]:
         return {
             "start": time(9, 0),
             "end": time(17, 0),
             "shift": "9:00AM - 5:00PM"
         }
 
-    elif staff == "CS 2 (Ed)":
-        return {
-            "start": time(9, 0),
-            "end": time(17, 0),
-            "shift": "9:00AM - 5:00PM"
-        }
-
-    # ===== 5PM - 1AM =====
-    elif staff == "CS 3 (John)":
+    # 5PM - 1AM
+    elif staff in [
+        "CS 3 (John)",
+        "CS 4 (Terry)"
+    ]:
         return {
             "start": time(17, 0),
             "end": time(1, 0),
             "shift": "5:00PM - 1:00AM"
         }
 
-    elif staff == "CS 4 (Terry)":
-        return {
-            "start": time(17, 0),
-            "end": time(1, 0),
-            "shift": "5:00PM - 1:00AM"
-        }
-
-    # ===== 1AM - 9AM =====
-    elif staff == "CS 5 (Sam)":
+    # 1AM - 9AM
+    elif staff in [
+        "CS 5 (Sam)"
+    ]:
         return {
             "start": time(1, 0),
             "end": time(9, 0),
@@ -102,38 +107,53 @@ def get_shift(staff):
 
     return None
 
+# =========================
+# GET STAFF NAME
+# =========================
+def get_staff(update):
 
-# ===== CHECK LATE =====
+    tg_name = update.effective_user.full_name.strip()
+
+    return tg_name, tg_name
+
+# =========================
+# CHECK LATE
+# =========================
 def check_late(now, start_time):
 
-    current = now.time()
+    shift_start = now.replace(
+        hour=start_time.hour,
+        minute=start_time.minute,
+        second=0,
+        microsecond=0
+    )
 
-    if current > start_time:
+    # allow 5 mins grace
+    grace = shift_start + timedelta(minutes=5)
+
+    if now > grace:
         return "Late ❌"
 
     return "On Time ✅"
 
+# =========================
+# LOG TO GOOGLE SHEET
+# =========================
+def log_sheet(staff, name, action, now, duration, status):
 
-# ===== LOG SHEET =====
-def log_sheet(staff, name, action, now, value="", status=""):
+    sheet.append_row([
+        now.strftime("%Y-%m-%d"),
+        now.strftime("%H:%M:%S"),
+        staff,
+        name,
+        action,
+        duration,
+        status
+    ])
 
-    try:
-        row = [
-            staff,
-            name,
-            action,
-            now.strftime("%Y-%m-%d %H:%M:%S"),
-            value,
-            status
-        ]
-
-        sheet.append_row(row)
-
-    except Exception as e:
-        print("SHEET ERROR =", e)
-
-
-# ===== START =====
+# =========================
+# START
+# =========================
 def start(update, context):
 
     update.message.reply_text(
@@ -141,15 +161,14 @@ def start(update, context):
         reply_markup=menu
     )
 
-
-# ===== WORK =====
+# =========================
+# ON DUTY
+# =========================
 def work(update, context):
 
     now = datetime.now(tz)
 
     staff, name = get_staff(update)
-
-    print("WORK STAFF =", repr(staff))
 
     shift_data = get_shift(staff)
 
@@ -168,25 +187,39 @@ def work(update, context):
 
     work_sessions[staff] = now
 
-    log_sheet(staff, name, "On Duty", now, "", status)
-
-    update.message.reply_text(
-        f"""👤 {staff}
-🟢 On Duty 成功
-⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
-📋 班次: {shift_name}
-{status}"""
+    log_sheet(
+        staff,
+        name,
+        "On Duty",
+        now,
+        "",
+        status
     )
 
+    update.message.reply_text(
+        f"""
+👤 {staff}
 
-# ===== END =====
+🟢 On Duty 成功
+
+🕒 时间:
+{now.strftime("%Y-%m-%d %H:%M:%S")}
+
+🏢 班次:
+{shift_name}
+
+📌 {status}
+"""
+    )
+
+# =========================
+# OFF DUTY
+# =========================
 def end(update, context):
 
     now = datetime.now(tz)
 
     staff, name = get_staff(update)
-
-    print("END STAFF =", repr(staff))
 
     if staff not in work_sessions:
         update.message.reply_text("❌ 你还没上班")
@@ -194,23 +227,38 @@ def end(update, context):
 
     start_work = work_sessions[staff]
 
-    seconds = int((now - start_work).total_seconds())
+    worked = now - start_work
 
-    hours = round(seconds / 3600, 2)
+    hours = round(worked.total_seconds() / 3600, 2)
+
+    log_sheet(
+        staff,
+        name,
+        "Off Duty",
+        now,
+        f"{hours} Hours",
+        ""
+    )
 
     del work_sessions[staff]
 
-    log_sheet(staff, name, "Off Duty", now, hours)
-
     update.message.reply_text(
-        f"""👤 {staff}
+        f"""
+👤 {staff}
+
 🔴 Off Duty 成功
-⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
-🕒 工作: {hours} 小时"""
+
+🕒 时间:
+{now.strftime("%Y-%m-%d %H:%M:%S")}
+
+⏱ 工作:
+{hours} 小时
+"""
     )
 
-
-# ===== BREAK =====
+# =========================
+# BREAK
+# =========================
 def rest(update, context):
 
     now = datetime.now(tz)
@@ -223,16 +271,26 @@ def rest(update, context):
 
     break_sessions[staff] = now
 
-    log_sheet(staff, name, "Break", now)
-
-    update.message.reply_text(
-        f"""👤 {staff}
-☕ Break 开始
-⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}"""
+    log_sheet(
+        staff,
+        name,
+        "Break",
+        now,
+        "",
+        ""
     )
 
+    update.message.reply_text(
+        f"""
+☕ {staff}
 
-# ===== BACK =====
+Break 开始
+"""
+    )
+
+# =========================
+# BACK
+# =========================
 def back(update, context):
 
     now = datetime.now(tz)
@@ -240,63 +298,93 @@ def back(update, context):
     staff, name = get_staff(update)
 
     if staff not in break_sessions:
-        update.message.reply_text("❌ 你没有在休息")
+        update.message.reply_text("❌ 你没有在 Break")
         return
 
     start_break = break_sessions[staff]
 
-    seconds = int((now - start_break).total_seconds())
+    duration = now - start_break
 
-    minutes = seconds // 60
+    mins = round(duration.total_seconds() / 60, 1)
+
+    log_sheet(
+        staff,
+        name,
+        "Back",
+        now,
+        f"{mins} Minutes",
+        ""
+    )
 
     del break_sessions[staff]
 
-    log_sheet(staff, name, "Break Back", now, f"{minutes} 分钟")
-
     update.message.reply_text(
-        f"""👤 {staff}
-✅ Break Back 成功
-⏰ 时间: {now.strftime("%Y-%m-%d %H:%M:%S")}
-☕ 休息: {minutes} 分钟 ({seconds} 秒)"""
+        f"""
+✅ {staff}
+
+Back 成功
+
+☕ Break:
+{mins} 分钟
+"""
     )
 
-
-# ===== HANDLE BUTTON =====
+# =========================
+# HANDLE BUTTONS
+# =========================
 def handle_message(update, context):
 
-    text = update.message.text.strip()
+    text = update.message.text
 
-    print("BUTTON =", text)
-
-    if "On Duty" in text:
+    if text in ["🟢 On Duty", "/work"]:
         work(update, context)
 
-    elif "Off Duty" in text:
+    elif text in ["🔴 Off Duty", "/end"]:
         end(update, context)
 
-    elif "Break" in text and "Back" not in text:
+    elif text in ["☕ Break", "/rest"]:
         rest(update, context)
 
-    elif "Back" in text:
+    elif text in ["✅ Back", "/back"]:
         back(update, context)
 
+# =========================
+# FLASK WEB
+# =========================
+app = Flask(__name__)
 
-# ===== RUN =====
+@app.route('/')
+def home():
+    return "BOT RUNNING"
+
+def run_web():
+    app.run(
+        host='0.0.0.0',
+        port=int(os.environ.get("PORT", 10000))
+    )
+
+Thread(target=run_web).start()
+
+# =========================
+# START BOT
+# =========================
 updater = Updater(TOKEN, use_context=True)
 
-updater.bot.delete_webhook()
+updater.bot.delete_webhook(drop_pending_updates=True)
 
 dp = updater.dispatcher
 
 dp.add_handler(CommandHandler("start", start))
-dp.add_handler(CommandHandler("work", work))
-dp.add_handler(CommandHandler("end", end))
-dp.add_handler(CommandHandler("rest", rest))
-dp.add_handler(CommandHandler("back", back))
 
-dp.add_handler(MessageHandler(Filters.text, handle_message))
+dp.add_handler(
+    MessageHandler(
+        Filters.text,
+        handle_message
+    )
+)
 
 print("BOT PRO+ RUNNING")
 
 updater.start_polling()
+
 updater.idle()
