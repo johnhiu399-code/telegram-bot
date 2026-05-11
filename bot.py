@@ -81,32 +81,37 @@ def get_staff(update):
 
 def get_shift(staff):
 
-    # 9AM - 5PM
-    if staff in [
-        "CS 1 (Avelyn)",
-        "CS 2 (Ed)"
-    ]:
+    staff = staff.strip()
+
+    if staff == "CS 1 (Avelyn)":
         return {
             "start": time(9, 0),
             "end": time(17, 0),
             "shift": "9:00AM - 5:00PM"
         }
 
-    # 5PM - 1AM
-    elif staff in [
-        "CS 3 (John)",
-        "CS 4 (Terry)"
-    ]:
+    elif staff == "CS 2 (Ed)":
+        return {
+            "start": time(9, 0),
+            "end": time(17, 0),
+            "shift": "9:00AM - 5:00PM"
+        }
+
+    elif staff == "CS 3 (John)":
         return {
             "start": time(17, 0),
             "end": time(1, 0),
             "shift": "5:00PM - 1:00AM"
         }
 
-    # 1AM - 9AM
-    elif staff in [
-        "CS 5 (Sam)"
-    ]:
+    elif staff == "CS 4 (Terry)":
+        return {
+            "start": time(17, 0),
+            "end": time(1, 0),
+            "shift": "5:00PM - 1:00AM"
+        }
+
+    elif staff == "CS 5 (Sam)":
         return {
             "start": time(1, 0),
             "end": time(9, 0),
@@ -152,14 +157,17 @@ def start(update, context):
 # ===== On Duty =====
 def work(update, context):
     now = datetime.now(tz)
+
     staff, name = get_staff(update)
+
+    print("STAFF =", repr(staff))
 
     shift_data = get_shift(staff)
 
     if not shift_data:
         update.message.reply_text("❌ 找不到你的班次")
         return
-
+        
     start_time = shift_data["start"]
     shift_name = shift_data["shift"]
 
