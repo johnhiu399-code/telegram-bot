@@ -45,7 +45,7 @@ menu = ReplyKeyboardMarkup(
 )
 
 # ===== 解析名字：CS 3 (John) =====
-ddef get_staff(update):
+def get_staff(update):
     tg_name = update.effective_user.full_name.strip()
 
     # 例子:
