@@ -82,24 +82,32 @@ def get_staff(update):
 
 def get_shift(staff):
 
-    # ===== 早班 =====
-    if staff in ["CS 1", "CS 2"]:
+    # 9AM - 5PM
+    if staff in [
+        "CS 1 (Avelyn)",
+        "CS 2 (Ed)"
+    ]:
         return {
             "start": time(9, 0),
             "end": time(17, 0),
             "shift": "9:00AM - 5:00PM"
         }
 
-    # ===== 晚班 =====
-    elif staff in ["CS 3", "CS 4"]:
+    # 5PM - 1AM
+    elif staff in [
+        "CS 3 (John)",
+        "CS 4 (Terry)"
+    ]:
         return {
             "start": time(17, 0),
             "end": time(1, 0),
             "shift": "5:00PM - 1:00AM"
         }
 
-    # ===== 凌晨班 =====
-    elif staff in ["CS 5"]:
+    # 1AM - 9AM
+    elif staff in [
+        "CS 5 (Sam)"
+    ]:
         return {
             "start": time(1, 0),
             "end": time(9, 0),
