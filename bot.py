@@ -395,34 +395,45 @@ def handle_message(update, context):
 
     text = update.message.text.strip()
 
-    print("收到按钮:", text)
+    # ===== 按钮 =====
 
-    # ON DUTY
     if "On Duty" in text:
 
         work(update, context)
 
-    # OFF DUTY
     elif "Off Duty" in text:
 
         end(update, context)
 
-    # BREAK
     elif text == "☕ Break":
 
         rest(update, context)
 
-    # BACK
     elif text == "✅ Back":
 
         back(update, context)
 
-    else:
+    # ===== 指令 =====
 
-        update.message.reply_text(
-            "请选择操作👇",
-            reply_markup=menu
-        )
+    elif text == "/work":
+
+        work(update, context)
+
+    elif text == "/end":
+
+        end(update, context)
+
+    elif text == "/rest":
+
+        rest(update, context)
+
+    elif text == "/back":
+
+        back(update, context)
+
+    # ❌ 不再乱回复
+    else:
+        return
 
 # =========================================
 # KEEP RENDER ALIVE
