@@ -1,3 +1,5 @@
+work_sessions = {}
+break_sessions = {}
 import os
 import logging
 from datetime import datetime, time, timedelta
