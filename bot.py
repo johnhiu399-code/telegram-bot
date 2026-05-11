@@ -46,18 +46,25 @@ menu = ReplyKeyboardMarkup(
 def get_staff(update):
     tg_name = update.effective_user.full_name.strip()
 
-    if "(" in tg_name and ")" in tg_name:
-        try:
-            staff = tg_name.split("(")[0].strip()
-            name = tg_name.split("(")[1].replace(")", "").strip()
-        except:
-            staff = tg_name
-            name = tg_name
-    else:
-        staff = tg_name
-        name = tg_name
+    # 例子:
+    # CS 3 (John)
 
-    return staff, name
+    if "(" in tg_name and ")" in tg_name:
+
+        left = tg_name.split("(")[0].strip()
+        right = tg_name.split("(")[1].replace(")", "").strip()
+
+        staff = left
+        name = right
+
+    else:
+        staff = tg_name.strip()
+        name = tg_name.strip()
+
+    # 防止空格问题
+    staff = " ".join(staff.split())
+
+    return staff.strip(), name.strip()
 
 # ===== 班次系统 =====
 # 9:00AM - 5:00PM
