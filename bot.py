@@ -51,7 +51,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_name(
 
 client = gspread.authorize(creds)
 
-sheet = client.open("CS Attendance").sheet1
+sheet = client.open("1B CS Attendance").sheet1
 
 # =========================================
 # LOGGING
