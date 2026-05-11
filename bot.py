@@ -45,7 +45,7 @@ menu = ReplyKeyboardMarkup(
 )
 
 # ===== 解析名字：CS 3 (John) =====
-def get_staff(update):
+ddef get_staff(update):
     tg_name = update.effective_user.full_name.strip()
 
     # 例子:
@@ -56,18 +56,17 @@ def get_staff(update):
         left = tg_name.split("(")[0].strip()
         right = tg_name.split("(")[1].replace(")", "").strip()
 
-        staff = left
+        staff = tg_name
         name = right
 
     else:
         staff = tg_name.strip()
         name = tg_name.strip()
 
-    # 防止空格问题
+    # 修正空格
     staff = " ".join(staff.split())
 
     return staff.strip(), name.strip()
-
 # ===== 班次系统 =====
 # 9:00AM - 5:00PM
 # CS 1 (Avelyn)
