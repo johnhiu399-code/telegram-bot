@@ -302,6 +302,7 @@ Thread(target=run_web).start()
 
 # ===== 启动 =====
 updater = Updater(TOKEN, use_context=True)
+
 updater.bot.delete_webhook()
 
 dp = updater.dispatcher
