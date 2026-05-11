@@ -44,7 +44,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_name(
 client = gspread.authorize(creds)
 
 # 改成你的 Google Sheet 名字
-sheet = client.open("CS Attendance").sheet1
+sheet = client.open("1B CS Attendance").sheet1
 
 # =========================
 # LOGGING
