@@ -118,7 +118,7 @@ def get_shift(staff):
 
     # ===== 9AM - 5PM =====
     if staff in [
-        "CS JOHN",
+        "CS AVELYN",
         "CS JAC"
     ]:
 
@@ -130,9 +130,10 @@ def get_shift(staff):
 
     # ===== 5PM - 1AM =====
     elif staff in [
-        "CS AVELYN",
+        "CS JOHN",
         "CS TERRY",
-        "CS JANNY"
+        "CS JANNY",
+        "CS Ethan"
     ]:
 
         return {
